@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+    <title>D3 Block-a-Day: Day 22, January 22nd, 2017</title>
+</head>
+
+<style>
+	body {
+	  font: 16pt Avenir;
+	}
+
+	.axis path,
+	.axis line {
+		 fill: none;
+		 stroke: #000;
+		 shape-rendering: crispEdges;
+	}
+
+	.dot {
+		stroke: black;
+    stroke-width: 2px;
+    fill: #00c6c0;
+	}
+
+	.tooltip {
+  	background-color: #fedea3;
+  	padding: 7px;
+  	text-shadow: #f5f5f5 0 1px 0;
+  	font: 15px Avenir;
+  	border: 2px solid;
+  	border-color: black;
+		border-radius: 5px;
+  	position: absolute;
+  	box-shadow: rgba(0, 0, 0, 0.3) 0 2px 10px;
+  }
+  
+  .xaxis {
+     font: 16px Avenir;
+   }
+  
+  .xaxisLabel {
+      text-anchor: left;
+      font-family: Avenir;
+  }
+   .yaxis {
+     font: 16px Avenir;
+   }
+   
+  .yaxisLabel {
+       text-anchor: middle;
+       font-family: Avenir;  
+  }
+  
+  .correlationLabel {
+      text-anchor: left;
+      font: 21px Avenir;
+      fill: #ef9b00;
+      stroke: black;
+      stroke-width: 0.5px;
+  }
+
+  .titleLabel {
+      text-anchor: middle;
+      font: 25px Avenir;
+      fill: black;
+      stroke-width: 0.5px;
+  }
+   .ticks {
+     font: 12px Avenir;
+   }
+
+   .track,
+   .track-inset,
+   .track-overlay {
+     stroke-linecap: round;
+   }
+
+   .track {
+     stroke: #000;
+     stroke-opacity: 0.3;
+     stroke-width: 10px;
+   }
+
+   .track-inset {
+     stroke: #ddd;
+     stroke-width: 8px;
+   }
+
+   .track-overlay {
+     pointer-events: stroke;
+     stroke-width: 50px;
+     cursor: crosshair;
+   }
+
+   .handle {
+     fill: #fff;
+     stroke: #000;
+     stroke-opacity: 0.5;
+     stroke-width: 1.25px;
+   }
+
+</style>
+<body>
+<script src="//d3js.org/d3.v4.min.js"></script>
+
+<script>
+var margin = {top: 60, right: 20, bottom: 100, left: 70},
+    width = 800 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+/*
+ * value accessor - returns the value to encode for a given data object.
+ * scale - maps value to a visual display encoding, such as a pixel position.
+ * map function - maps from data value to display value
+ * axis - sets up axis
+ */
+
+// setup x
+var xValue = function(d) { return d.winsPrev; }, // data -> value
+    xScale = d3.scaleLinear().range([0, width]), // value -> display
+    xMap = function(d) { return xScale(xValue(d));}, // data -> display
+    xAxis = d3.axisBottom(xScale);
+
+// setup y
+var yValue = function(d) { return d.wins; }, // data -> value
+    yScale = d3.scaleLinear().range([height, 0]), // value -> display
+    yMap = function(d) { return yScale(yValue(d));}, // data -> display
+    yAxis = d3.axisLeft(yScale);
+
+// for slider
+var x = d3.scaleLinear()
+    .domain([2016, 1902])
+    .range([0, width])
+    .clamp(true);
+  
+// add the graph canvas to the body of the webpage
+var svg = d3.select("body").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+// add the tooltip area to the webpage
+var tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+  
+// load data
+d3.json("baseball_team_wins.json", function(error, data) {
+			if (error) return console.warn(error);
+
+  // don't want dots overlapping axis, so add in buffer to data domain
+  xScale.domain([30, 120]);
+  yScale.domain([30, 120]);
+
+  var activeYear = 2016;
+  
+  // x-axis
+  svg.append("g")
+      .attr("class", "xaxis")
+      .attr("transform", "translate(0," + height + ")")
+      .call(xAxis);
+
+  // x-axis label
+  svg.append("text")
+      .attr('class', 'xAxisLabel')
+   		.attr("transform",
+            "translate(" + (width*0.1) + " ," +
+                           (height + margin.top) + ")")
+      .text("Wins " + (activeYear - 1));
+  
+  // y-axis
+  svg.append("g")
+      .attr("class", "yaxis")
+      .call(yAxis);
+
+  // y-axis label
+  svg.append("text")
+      .attr('class', 'yAxisLabel')
+      .attr("transform", "rotate(-90)")
+      .attr("y", 10 - margin.left)
+  		.attr("x", - 0.75*height)
+      .attr("dy", ".71em")
+      .text("Wins " + activeYear);
+  
+   var years = data.filter(y => {
+       return y.year === activeYear || y.year === activeYear - 1;
+   });
+   var teams = years[0].teams;
+   var correlation = years[0].correlation;
+   teams.forEach((t, i) => {
+       var sameTeamPrevYear = years[1].teams.filter(t2 => {
+          return t2.name === t.name;
+        });
+        t.winsPrev = sameTeamPrevYear[0].wins;
+    });
+
+   // add in the slider
+   var slider = svg.append("g")
+    .attr("class", "slider")
+    .attr("transform", "translate(" + 0 + "," + (height + margin.top + 20) + ")");
+
+     var yearActual = 2016,
+     yearTarget = 2016,
+     yearTimer = d3.timer(yearTween);
+  
+   slider.append("line")
+       .attr("class", "track")
+       .attr("x1", x.range()[0])
+       .attr("x2", x.range()[1])
+     .select(function() { return	 	this.parentNode.appendChild(this.cloneNode(true)); })
+       .attr("class", "track-inset")
+       .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+       .attr("class", "track-overlay")
+       .call(d3.drag()
+           .on("start.interrupt", function() { slider.interrupt(); })
+           .on("start drag", function() { year(x.invert(d3.event.x)); }));  
+  
+   slider.insert("g", ".track-overlay")
+     .attr("class", "ticks")
+     .attr("transform", "translate(0," + 18 + ")")
+     .selectAll("text")
+     .data(x.ticks(10))
+     .enter().append("text")
+     .attr("x", x)
+     .attr("text-anchor", "middle")
+     .text(function(d) { return d; });
+
+   var handle = slider.insert("circle", ".track-overlay")
+     .attr("class", "handle")
+     .attr("r", 9);
+  
+   function year(h) {
+      yearTarget = h;
+      yearTimer.restart(yearTween);
+   }
+
+   function yearTween() {
+     yearActual = yearTarget;
+     handle.attr("cx", x(yearActual));
+     update(yearActual);
+   }
+
+    // draw dots
+    svg.selectAll(".dot")
+      .data(teams)
+	    .enter()
+      .append("circle")
+      .attr("class", "dot")
+      .attr("r", 10)
+      .attr("cx", xMap)
+      .attr("cy", yMap)
+      .on("mouseover", function(d) {
+          tooltip.transition()
+               .duration(75)
+          			.style("opacity", .9);
+          tooltip.html("<b>" + d.name + "</b>" + "<br/>" + (activeYear - 1) + ": " + xValue(d)
+	        + " Wins, " + activeYear + ": " + yValue(d) + " Wins")
+               .style("left", (d3.event.pageX + 5) + "px")
+               .style("top", (d3.event.pageY - 28) + "px");
+      })
+      .on("mouseout", function(d) {
+          tooltip.transition()
+               .duration(300)
+               .style("opacity", 0);
+      });
+  
+    svg.append("text")
+      .attr('class', 'correlationLabel')
+   		.attr("transform",
+            "translate(50, 70)")
+      .text("Correlation = " + correlation);
+  
+    svg.append("text")
+      .attr('class', 'titleLabel')
+   		.attr("transform",
+            "translate(" + width/2 + ", -20)")
+      .text("MLB Baseball Team Wins in Consecutive Years: " + (activeYear - 1) + " & " +  activeYear );
+  
+    function update(year) {
+       var activeYear = Math.round(year);
+       var years = data.filter(y => {
+       return y.year === activeYear || y.year === activeYear - 1;
+     });
+     if(!years.length) return;
+     var teams = years[0].teams;
+     var correlation = years[0].correlation;
+     teams.forEach((t, i) => {
+       var sameTeamPrevYear = years[1].teams.filter(t2 => {
+          return t2.name === t.name;
+        });
+        t.winsPrev = sameTeamPrevYear[0].wins;
+     });
+
+     // x-axis label
+     d3.select('.xAxisLabel')
+         .text("Wins " + (activeYear - 1));
+
+     // y-axis label
+     d3.select('.yAxisLabel')
+          .text("Wins " + activeYear);  
+
+    // correlation label
+    d3.select('.correlationLabel')
+      .text("Correlation = " + correlation)
+
+    // title label
+    d3.select(".titleLabel")
+          .text("MLB Baseball Team Wins in Consecutive Years: " + (activeYear - 1) + " & " +  activeYear );
+      
+    // Scatterplot
+      svg.selectAll(".dot")
+         .data(teams)
+         .attr("cx", xMap)
+         .attr("cy", yMap)
+         .on("mouseover", function(d) {
+          tooltip.transition()
+               .duration(75)
+          			.style("opacity", .9);
+          tooltip.html("<b>" + d.name + "</b>" + "<br/>" + (activeYear - 1) + ": " + xValue(d)
+	        + " Wins, " + activeYear + ": " + yValue(d) + " Wins")
+               .style("left", (d3.event.pageX + 5) + "px")
+               .style("top", (d3.event.pageY - 28) + "px");
+          })
+          .on("mouseout", function(d) {
+              tooltip.transition()
+               .duration(300)
+               .style("opacity", 0);
+          });
+    } //END update
+});
+
+</script>
+</body>
